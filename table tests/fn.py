@@ -3,6 +3,7 @@ from fuzzywuzzy import fuzz
 from fuzzywuzzy import process
 import datetime
 
+
 # gc = gspread.service_account(filename='credentials.json')
 #
 # table = gc.open_by_key("1QTbU7fX_VrcqEuI_9LoD-zpazTgyJydxHrFiUlTSjPk")
@@ -17,10 +18,9 @@ def find_student(table, key):
     find_res = []
 
     for e in find:
-        if e[1] != 0:
+        if e[1] > 10:
             find_res.append(e)
     return find_res
 
-#
 # find_res = find_student(table, input())
 # print(find_res)
