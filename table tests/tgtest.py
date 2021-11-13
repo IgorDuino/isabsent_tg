@@ -1,40 +1,76 @@
 import telebot
 from telebot import types
+from fn import find_student
+import menu
+import gspread
 
 API_TOKEN = '2138511910:AAGYBjjEsZyMQwAMDd5mdhoTX_osuAnqeDM'
 
-bot = telebot.TeleBot(API_TOKEN)
-
 user_dict = {}
+
+gc = gspread.service_account(filename='credentials.json')
+
+table = gc.open_by_key("1QTbU7fX_VrcqEuI_9LoD-zpazTgyJydxHrFiUlTSjPk")
 
 
 class User:
-    def __init__(self, name):
-        self.name = name
+    def __init__(self, role):
+        self.role = role
+        self.name = None
         self.age = None
         self.sex = None
 
 
-# Handle '/start' and '/help'
+bot = telebot.TeleBot(API_TOKEN)
+
+
 @bot.message_handler(commands=['help', 'start'])
-def send_welcome(message):
-    msg = bot.reply_to(message, """\
-Hi there, I am Example bot.
-What's your name?
-""")
-    bot.register_next_step_handler(msg, process_name_step)
+def send_welcome(message: types.Message):
+    msg = bot.send_message(message.chat.id, """\
+Здравствуйте, я бот для отметки отсутствия в школе
+Пожалуйста выберите роль:
+""", reply_markup=menu.start)
+
+
+@bot.callback_query_handler(func=lambda call: True)
+def callback(call: types.CallbackQuery):
+    user_id = call.from_user.id
+    data = call.data
+    if data == 'student':
+        user = User(data)
+        user_dict[user_id] = user
+
+        msg = bot.edit_message_text('Отлично, теперь напиши своё Имя и Фамилию', user_id, call.message.id)
+        bot.register_next_step_handler(msg, process_name_step)
+    elif data == 'teacher':
+        pass
+    elif data == 'меня тут нет':
+        msg = bot.send_message(user_id, 'Попробуй написать немного подругому или более подробно своё ФИО. '
+                                        'Если это не поможет Обратись к @igorduino или к @SvinoBuddist')
+        bot.register_next_step_handler(msg, process_name_step)
 
 
 def process_name_step(message):
-    try:
-        chat_id = message.chat.id
-        name = message.text
-        user = User(name)
-        user_dict[chat_id] = user
-        msg = bot.reply_to(message, 'How old are you?')
-        bot.register_next_step_handler(msg, process_age_step)
-    except Exception as e:
-        bot.reply_to(message, 'oooops')
+    chat_id = message.chat.id
+    text = message.text
+
+    user_dict[chat_id].name = text
+    find_res = find_student(table, text)
+
+    if len(find_res) == 0:
+        msg = bot.send_message(chat_id, 'К сожалению я не нашёл тебя  своём списке... Попробуй написать по-другому')
+        bot.register_next_step_handler(msg, process_name_step)
+    else:
+        keyboard = types.InlineKeyboardMarkup()
+        for student in find_res:
+            keyboard.add(types.InlineKeyboardButton(text=student[0], callback_data=student[0]))
+
+        keyboard.add(types.InlineKeyboardButton(text='❌ Меня тут нет', callback_data='меня тут нет'))
+
+        msg = bot.send_message(chat_id, f'Я нашёл {len(find_res)} похожих вариантов. Если ты тут есть нажми '
+                                        f'на себя', reply_markup=keyboard)
+
+        # bot.register_next_step_handler(msg, process_age_step)
 
 
 def process_age_step(message):
@@ -64,7 +100,8 @@ def process_sex_step(message):
             user.sex = sex
         else:
             raise Exception("Unknown sex")
-        bot.send_message(chat_id, 'Nice to meet you ' + user.name + '\n Age:' + str(user.age) + '\n Sex:' + user.sex)
+        bot.send_message(chat_id,
+                         'Nice to meet you ' + user.name + '\n Age:' + str(user.age) + '\n Sex:' + user.sex)
     except Exception as e:
         bot.reply_to(message, 'oooops')
 
