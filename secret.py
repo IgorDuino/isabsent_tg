@@ -1,0 +1,2 @@
+API_TOKEN = '2138511910:AAGYBjjEsZyMQwAMDd5mdhoTX_osuAnqeDM'
+list_of_admins_id = [759634381, 902729981]
