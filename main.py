@@ -1,3 +1,4 @@
+import logging
 import datetime
 import requests
 import telebot
@@ -37,8 +38,7 @@ def send_welcome(message: telebot.types.Message):
                                    reply_markup=menu.main_teacher_menu)
         elif user['type'] == 'student':
             msg = bot.send_message(message.chat.id,
-                                   f"{user['name']}, пока нет возможности авторизоваться ученикам. Если Вы учитель, "
-                                   f"то проверьте код и введите повторно")
+                                   f"Здравствуйте, {user['name']}, Вы успешно авторизовались как ученик!")
 
     elif response_find_by_tg.status_code == 400:
         msg = bot.send_message(message.chat.id, f"Здравствуйте, я бот для отметки отсутствия в школе\n "
