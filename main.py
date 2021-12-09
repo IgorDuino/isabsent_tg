@@ -18,9 +18,18 @@ class Absent:
         self.date = datetime.date.today()
         self.reason = None
         self.proof = None
+        self.role = 'teacher'
+        self.accept = False
+
+
+class School:
+    def __init__(self, school_name):
+        self.school_name = school_name
+        self.link = None
 
 
 temp_absents = {}
+temp_schools = {}
 
 
 @bot.message_handler(commands=['start'])
@@ -155,6 +164,15 @@ def callback_inline(call: telebot.types.CallbackQuery):
         msg = bot.edit_message_text(f'Напишите название школы', call.from_user.id, call.message.id)
         bot.register_next_step_handler(msg, admin_choose_school_to_load_teachers_from_google)
 
+    elif call.data == 'add_school':
+        msg = bot.edit_message_text(f'Название школы', call.from_user.id, call.message.id)
+        bot.register_next_step_handler(msg, admin_add_school_name)
+
+    elif call.data == 'school_list':
+        response_get_schools = requests.get(base_url + 'schools')
+        msg = bot.edit_message_text(response_get_schools.text, call.from_user.id, call.message.id,
+                                    reply_markup=menu.main_admin_menu)
+
 
 def admin_choose_school_to_load_students_from_google(message: telebot.types.Message):
     data_load_students_from_google = {
@@ -164,6 +182,24 @@ def admin_choose_school_to_load_students_from_google(message: telebot.types.Mess
                                                        json=data_load_students_from_google)
     msg = bot.send_message(message.chat.id, f'Код: {response_load_students_from_google.status_code}',
                            reply_markup=menu.main_admin_menu)
+
+
+def admin_add_school_link(message: telebot.types.Message):
+    temp_schools[str(message.chat.id)].link = message.text
+    data_add_school = {
+        "school_name": temp_schools[str(message.chat.id)].school_name,
+        "link": message.text
+    }
+    response_add_school = requests.post(base_url + 'school',
+                                        json=data_add_school)
+    msg = bot.send_message(message.chat.id, f'Код: {response_add_school.status_code}',
+                           reply_markup=menu.main_admin_menu)
+
+
+def admin_add_school_name(message: telebot.types.Message):
+    temp_schools[str(message.chat.id)] = School(message.text)
+    msg = bot.send_message(message.chat.id, 'Ссылка на таблицу:')
+    bot.register_next_step_handler(msg, admin_add_school_link)
 
 
 def admin_choose_school_to_load_teachers_from_google(message: telebot.types.Message):

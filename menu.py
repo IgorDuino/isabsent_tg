@@ -32,3 +32,7 @@ main_admin_menu.add(
     InlineKeyboardButton(text="Загрузить список учеников из таблицы", callback_data="load_students_from_google"))
 main_admin_menu.add(
     InlineKeyboardButton(text="Загрузить список учителей из таблицы", callback_data="load_teachers_from_google"))
+main_admin_menu.add(
+    InlineKeyboardButton(text="Добавить школу", callback_data="add_school"))
+main_admin_menu.add(
+    InlineKeyboardButton(text="Список школ", callback_data="school_list"))
