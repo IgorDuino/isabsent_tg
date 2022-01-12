@@ -1,6 +1,6 @@
 def validate_date(date: str):
     try:
-        data = data.split('-')
+        data = date.split('-')
         if len(data) == 3:
             if len(data[0]) == 4 and data[0].isdigit():
                 if len(data[1]) < 3 and data[1].isdigit():

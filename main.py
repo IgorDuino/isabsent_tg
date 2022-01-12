@@ -27,14 +27,14 @@ def send_welcome(message: telebot.types.Message):
     data_find_by_tg = {
         "tg_user_id": message.chat.id,
     }
-    response_find_by_tg = requests.get(url=base_url + 'school/find_by_code', json=data_find_by_tg)
+    response_find_by_tg = requests.get(url=base_url + 'school/find_by_code', params=data_find_by_tg)
 
     if response_find_by_tg.status_code == 200:
         user = response_find_by_tg.json()
         full_name = f"{user['surname']} {user['name']}"
         if user['type'] == 'teacher':
             msg = bot.send_message(message.chat.id, f'Вы успешно авторизовались как учитель {full_name}',
-                                   reply_markup=menu.main_teacher_menu)
+                                   reply_markup=menu.main_teacher_menu())
         elif user['type'] == 'student':
             msg = bot.send_message(message.chat.id,
                                    f"{user['name']}, пока нет возможности авторизоваться ученикам. Если Вы учитель, "
@@ -51,7 +51,7 @@ def help_(message: telebot.types.Message):
     data_find_by_tg = {
         "tg_user_id": str(message.chat.id),
     }
-    response_find_by_tg = requests.get(url=base_url + 'school/find_by_code', json=data_find_by_tg)
+    response_find_by_tg = requests.get(url=base_url + 'school/find_by_code', params=data_find_by_tg)
 
     if response_find_by_tg.status_code == 200:
         user = response_find_by_tg.json()
@@ -68,7 +68,7 @@ def help_(message: telebot.types.Message):
 @bot.message_handler(commands=['admin'])
 def admin(message: telebot.types.Message):
     if message.chat.id in secret.list_of_admins_id:
-        msg = bot.send_message(message.chat.id, 'Что тебе надобно, старче-адмэн', reply_markup=menu.main_admin_menu)
+        msg = bot.send_message(message.chat.id, 'Что тебе надобно, старче-адмэн', reply_markup=menu.main_admin_menu())
     else:
         msg = bot.send_message(message.chat.id, 'Вы не админ')
 
@@ -103,35 +103,25 @@ def callback_inline(call: telebot.types.CallbackQuery):
         data_find_student = {
             "code": code
         }
-        response_find_student = requests.get(url=base_url + 'student', json=data_find_student)
+        response_find_student = requests.get(url=base_url + 'student', params=data_find_student)
         student = response_find_student.json()
 
         full_name = f"{student['surname']} {student['name']}"
 
         msg = bot.edit_message_text(f'Выбран ученик: {full_name}\nВыберите дату',
                                     call.from_user.id,
-                                    call.message.id, reply_markup=menu.choose_date)
+                                    call.message.id, reply_markup=menu.choose_day('addAbsent'))
 
-    elif call.data == 'choose_date_other':
+    elif call.data.startswith('choose_date_other'):
         msg = bot.edit_message_text(f'Напишите дату в формате 2021-12-05',
                                     call.from_user.id,
                                     call.message.id)
-
-        bot.register_next_step_handler(msg, choose_date_other)
+        prefix = call.data.split('_')[-1]
+        bot.register_next_step_handler(msg, choose_date_other, prefix)
 
     elif call.data.startswith('choose_date_'):
-        date = call.data.split('choose_date_')[1]
-        day = datetime.timedelta(days=1)
-        if date == 'today':
-            date = datetime.date.today()
-        elif date == 'tomorrow':
-            date = datetime.date.today() + day
-        elif date == 'day_after_tomorrow':
-            date = datetime.date.today() + day + day
-
-        temp_absents[str(call.from_user.id)].date = str(date)
-        msg = bot.edit_message_text(f'Выберите причину отсутствия', call.from_user.id, call.message.id,
-                                    reply_markup=menu.choose_reason)
+        prefix = call.data.split('_')[-1]
+        choose_date(call, prefix)
 
     elif call.data == 'choose_reason_other':
         msg = bot.edit_message_text('Напшите причину:', call.from_user.id, call.message.id)
@@ -142,10 +132,12 @@ def callback_inline(call: telebot.types.CallbackQuery):
         temp_absents[str(call.from_user.id)].reason = reason
         response = send_absent(temp_absents[str(call.from_user.id)])
         if response.status_code == 201:
-            msg = bot.send_message(call.from_user.id, 'Запись успешно добавлена!', reply_markup=menu.main_teacher_menu)
+            msg = bot.edit_message_text('Запись успешно добавлена!', call.from_user.id, call.message.id,
+                                        reply_markup=menu.main_teacher_menu())
         elif response.status_code == 400:
-            msg = bot.send_message(call.from_user.id, 'В эту дату данный ученик уже имеет запись об отсутствии',
-                                   reply_markup=menu.main_teacher_menu)
+            msg = bot.edit_message_text('В эту дату данный ученик уже имеет запись об отсутствии',
+                                        call.from_user.id, call.message.id,
+                                        reply_markup=menu.main_teacher_menu())
 
     elif call.data == 'load_students_from_google':
         msg = bot.edit_message_text(f'Напишите название школы', call.from_user.id, call.message.id)
@@ -155,6 +147,35 @@ def callback_inline(call: telebot.types.CallbackQuery):
         msg = bot.edit_message_text(f'Напишите название школы', call.from_user.id, call.message.id)
         bot.register_next_step_handler(msg, admin_choose_school_to_load_teachers_from_google)
 
+    elif call.data == 'show_class_absents':
+        msg = bot.edit_message_text('Выберите дату',
+                                    call.from_user.id,
+                                    call.message.id, reply_markup=menu.choose_day('classAbsents'))
+
+
+def show_class_absents_for_current_teacher(date: str,
+                                           message: telebot.types.Message = None,
+                                           call: telebot.types.CallbackQuery = None):
+    if message is not None:
+        request_query = {
+            "date": date,
+            "tg_user_id": message.from_user.id
+        }
+        response = requests.get(f'{base_url}teacher/absents', params=request_query).json()
+        if len(response['absents']) == 0:
+            msg = bot.send_message(message.chat.id, f'На {date} пропусков нет',
+                                   reply_markup=menu.main_teacher_menu())
+        else:
+            absent_student_print_list = [f'Пропуски на {date}']
+            for absent in response['absents']:
+                request_query = {
+                    "code": absent['code']
+                }
+                student = requests.get(f'{base_url}student', params=request_query).json()
+                absent_student_print_list.append(f"{student['name']} {student['surname']}: {absent['reason']}")
+            msg = bot.send_message(message.chat.id, "\n".join(absent_student_print_list),
+                                   reply_markup=menu.main_teacher_menu())
+
 
 def admin_choose_school_to_load_students_from_google(message: telebot.types.Message):
     data_load_students_from_google = {
@@ -163,7 +184,7 @@ def admin_choose_school_to_load_students_from_google(message: telebot.types.Mess
     response_load_students_from_google = requests.post(base_url + 'school/students',
                                                        json=data_load_students_from_google)
     msg = bot.send_message(message.chat.id, f'Код: {response_load_students_from_google.status_code}',
-                           reply_markup=menu.main_admin_menu)
+                           reply_markup=menu.main_admin_menu())
 
 
 def admin_choose_school_to_load_teachers_from_google(message: telebot.types.Message):
@@ -173,26 +194,48 @@ def admin_choose_school_to_load_teachers_from_google(message: telebot.types.Mess
     response_load_students_from_google = requests.post(base_url + 'school/teachers',
                                                        json=data_load_students_from_google)
     msg = bot.send_message(message.chat.id, f'Код: {response_load_students_from_google.status_code}',
-                           reply_markup=menu.main_admin_menu)
+                           reply_markup=menu.main_admin_menu())
 
 
-def choose_date_other(message: telebot.types.Message):
+def choose_date_other(message: telebot.types.Message, prefix):
     if tools.validate_date(message.text):
-        temp_absents[str(message.chat.id)].date = message.text
-        msg = bot.send_message(message.chat.id, f'Выберите причину отсутствия', reply_markup=menu.choose_reason)
+        if prefix == 'addAbsent':
+            temp_absents[str(message.chat.id)].date = message.text
+            msg = bot.send_message(message.chat.id, f'Выберите причину отсутствия', reply_markup=menu.choose_reason())
+        elif prefix == 'classAbsents':
+            show_class_absents_for_current_teacher(message=message, date=message.text)
     else:
         msg = bot.send_message(message.chat.id, f'Неккоретный формат даты. Напишите дату в формате 2021-12-05')
-        bot.register_next_step_handler(msg, choose_date_other)
+        bot.register_next_step_handler(msg, choose_date_other, prefix)
+
+
+def choose_date(call, prefix):
+    date = call.data.split('choose_date_')[1]
+    date = date.split('_' + prefix)[0]
+    day = datetime.timedelta(days=1)
+    if date == 'today':
+        date = datetime.date.today()
+    elif date == 'tomorrow':
+        date = datetime.date.today() + day
+    elif date == 'day_after_tomorrow':
+        date = datetime.date.today() + day + day
+
+    if prefix == 'addAbsent':
+        temp_absents[str(call.from_user.id)].date = str(date)
+        msg = bot.edit_message_text(f'Выберите причину отсутствия', call.from_user.id, call.message.id,
+                                    reply_markup=menu.choose_reason())
+    elif prefix == 'classAbsents':
+        pass
 
 
 def choose_reason_other(message: telebot.types.Message):
     temp_absents[str(message.chat.id)].reason = message.text
     response = send_absent(temp_absents[str(message.chat.id)])
     if response.status_code == 201:
-        msg = bot.send_message(message.chat.id, 'Запись успешно добавлена!', reply_markup=menu.main_teacher_menu)
+        msg = bot.send_message(message.chat.id, 'Запись успешно добавлена!', reply_markup=menu.main_teacher_menu())
     elif response.status_code == 400:
         msg = bot.send_message(message.chat.id, 'В эту дату данный ученик уже имеет запись об отсутствии',
-                               reply_markup=menu.main_teacher_menu)
+                               reply_markup=menu.main_teacher_menu())
 
 
 def choose_student(message: telebot.types.Message):
@@ -200,27 +243,19 @@ def choose_student(message: telebot.types.Message):
         "tg_user_id": message.chat.id,
         "name": message.text
     }
-    response_find_students = requests.get(url=base_url + 'teacher/students_by_name', json=data_find_students)
+    response_find_students = requests.get(url=base_url + 'teacher/students_by_name', params=data_find_students)
 
     if response_find_students.status_code == 200:
         founded_students = response_find_students.json()['students']
-
-        inline_keyboard = telebot.types.InlineKeyboardMarkup()
-        for student in founded_students:
-            full_name = f"{student['surname']} {student['name']}"
-            inline_keyboard.add(
-                telebot.types.InlineKeyboardButton(text=full_name, callback_data=f"choose_student_{student['code']}"))
-        inline_keyboard.add(
-            telebot.types.InlineKeyboardButton(text='Другой', callback_data=f"choose_student_nobody"))
-
-        msg = bot.send_message(message.chat.id, f'Выберите из списка:', reply_markup=inline_keyboard)
+        msg = bot.send_message(message.chat.id, f'Выберите из списка:',
+                               reply_markup=menu.choose_student(founded_students))
 
 
 def auth_code(message: telebot.types.Message):
     data_find_by_code = {
         "code": message.text,
     }
-    response_find_by_code = requests.get(url=base_url + 'school/find_by_code', json=data_find_by_code)
+    response_find_by_code = requests.get(url=base_url + 'school/find_by_code', params=data_find_by_code)
 
     if response_find_by_code.status_code == 200:
         user = response_find_by_code.json()
@@ -236,12 +271,12 @@ def auth_code(message: telebot.types.Message):
         if user['type'] == 'teacher':
             response_th_auth = requests.post(url=base_url + 'teacher/tg_auth', json=data_auth_tg)
             msg = bot.send_message(message.chat.id,
-                                   f'Вы успешно авторизовались как учител {class_name} класса - {full_name}',
-                                   reply_markup=menu.main_teacher_menu)
+                                   f'Вы успешно авторизовались как учитель {class_name} класса - {full_name}',
+                                   reply_markup=menu.main_teacher_menu())
         elif user['type'] == 'student':
             response_th_auth = requests.post(url=base_url + 'student/tg_auth', json=data_auth_tg)
-            # msg = bot.send_message(message.chat.id, f'Вы успешно авторизовались как ученик {full_name}',
-            #                        reply_markup=menu.main_student_menu)
+            msg = bot.send_message(message.chat.id, f'Вы успешно авторизовались как ученик {full_name}',
+                                   reply_markup=menu.main_student_menu())
             msg = bot.send_message(message.chat.id,
                                    f"{user['name']}, пока нет возможности авторизоваться ученикам. Если Вы учитель, "
                                    f"то проверьте код и введите повторно")
