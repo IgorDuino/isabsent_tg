@@ -89,28 +89,16 @@ def callback_inline(call: telebot.types.CallbackQuery):
         temp_absents[str(call.from_user.id)] = Absent(call.from_user.id)
         msg = bot.edit_message_text(f'Выберите ученика. Напишите имя или фамилию частично', call.from_user.id,
                                     call.message.id)
-        bot.register_next_step_handler(msg, choose_student)
+        bot.register_next_step_handler(msg, choose_student, addAbsent)
 
-    elif call.data == 'choose_student_nobody':
+    elif call.data.startswith('choose_student_nobody'):
+        prefix = call.data.split('choose_student_nobody_')[1]
         msg = bot.edit_message_text(f'Напишите имя или фамилию частично', call.from_user.id,
                                     call.message.id)
-        bot.register_next_step_handler(msg, choose_student)
+        bot.register_next_step_handler(msg, choose_student, prefix)
 
     elif call.data.startswith('choose_student_'):
-        code = call.data.split('choose_student_')[1]
-        temp_absents[str(call.from_user.id)].student_code = code
-
-        data_find_student = {
-            "code": code
-        }
-        response_find_student = requests.get(url=base_url + 'student', params=data_find_student)
-        student = response_find_student.json()
-
-        full_name = f"{student['surname']} {student['name']}"
-
-        msg = bot.edit_message_text(f'Выбран ученик: {full_name}\nВыберите дату',
-                                    call.from_user.id,
-                                    call.message.id, reply_markup=menu.choose_day('addAbsent'))
+        choose_student_call(call)
 
     elif call.data.startswith('choose_date_other'):
         msg = bot.edit_message_text(f'Напишите дату в формате 2021-12-05',
@@ -147,10 +135,31 @@ def callback_inline(call: telebot.types.CallbackQuery):
         msg = bot.edit_message_text(f'Напишите название школы', call.from_user.id, call.message.id)
         bot.register_next_step_handler(msg, admin_choose_school_to_load_teachers_from_google)
 
+    elif call.data == 'show_student_absents':
+        msg = bot.edit_message_text(f'Выберите ученика. Напишите имя или фамилию частично', call.from_user.id,
+                                    call.message.id)
+        bot.register_next_step_handler(msg, choose_student, "studentAbsents")
+
     elif call.data == 'show_class_absents':
         msg = bot.edit_message_text('Выберите дату',
                                     call.from_user.id,
                                     call.message.id, reply_markup=menu.choose_day('classAbsents'))
+
+
+def show_student_absents(name: str, call: telebot.types.CallbackQuery):
+    request_query = {
+        "tg_user_id": call.from_user.id
+    }
+    response = requests.get(f'{base_url}student/absents', params=request_query).json()
+    if len(response['absents']) == 0:
+        msg = bot.edit_message_text(f'Студент {name} не пропускает', call.from_user.id, call.message.id,
+                                    reply_markup=menu.main_teacher_menu())
+    else:
+        absent_student_print_list = [f'Пропуски студента {name}']
+        for absent in response['absents']:
+            absent_student_print_list.append(f"{absent['date']}: {absent['reason']}")
+        msg = bot.edit_message_text("\n".join(absent_student_print_list), call.from_user.id, call.message.id,
+                                    reply_markup=menu.main_teacher_menu())
 
 
 def show_class_absents_for_current_teacher(date: str,
@@ -175,6 +184,25 @@ def show_class_absents_for_current_teacher(date: str,
                 absent_student_print_list.append(f"{student['name']} {student['surname']}: {absent['reason']}")
             msg = bot.send_message(message.chat.id, "\n".join(absent_student_print_list),
                                    reply_markup=menu.main_teacher_menu())
+    if call is not None:
+        request_query = {
+            "date": date,
+            "tg_user_id": call.from_user.id
+        }
+        response = requests.get(f'{base_url}teacher/absents', params=request_query).json()
+        if len(response['absents']) == 0:
+            msg = bot.edit_message_text(f'На {date} пропусков нет', call.from_user.id, call.message.id,
+                                        reply_markup=menu.main_teacher_menu())
+        else:
+            absent_student_print_list = [f'Пропуски на {date}']
+            for absent in response['absents']:
+                request_query = {
+                    "code": absent['code']
+                }
+                student = requests.get(f'{base_url}student', params=request_query).json()
+                absent_student_print_list.append(f"{student['name']} {student['surname']}: {absent['reason']}")
+            msg = bot.edit_message_text("\n".join(absent_student_print_list), call.from_user.id, call.message.id,
+                                        reply_markup=menu.main_teacher_menu())
 
 
 def admin_choose_school_to_load_students_from_google(message: telebot.types.Message):
@@ -225,7 +253,7 @@ def choose_date(call, prefix):
         msg = bot.edit_message_text(f'Выберите причину отсутствия', call.from_user.id, call.message.id,
                                     reply_markup=menu.choose_reason())
     elif prefix == 'classAbsents':
-        pass
+        show_class_absents_for_current_teacher(call=call, date=str(date))
 
 
 def choose_reason_other(message: telebot.types.Message):
@@ -238,7 +266,7 @@ def choose_reason_other(message: telebot.types.Message):
                                reply_markup=menu.main_teacher_menu())
 
 
-def choose_student(message: telebot.types.Message):
+def choose_student(message: telebot.types.Message, prefix):
     data_find_students = {
         "tg_user_id": message.chat.id,
         "name": message.text
@@ -248,7 +276,36 @@ def choose_student(message: telebot.types.Message):
     if response_find_students.status_code == 200:
         founded_students = response_find_students.json()['students']
         msg = bot.send_message(message.chat.id, f'Выберите из списка:',
-                               reply_markup=menu.choose_student(founded_students))
+                               reply_markup=menu.choose_student(founded_students, prefix))
+
+
+def choose_student_call(call):
+    code = call.data.split('choose_student_')[1]
+    code, prefix = code.split('_')
+    if prefix == 'addAbsent':
+        temp_absents[str(call.from_user.id)].student_code = code
+
+        data_find_student = {
+            "code": code
+        }
+        response_find_student = requests.get(url=base_url + 'student', params=data_find_student)
+        student = response_find_student.json()
+
+        full_name = f"{student['surname']} {student['name']}"
+
+        msg = bot.edit_message_text(f'Выбран ученик: {full_name}\nВыберите дату',
+                                    call.from_user.id,
+                                    call.message.id, reply_markup=menu.choose_day('addAbsent'))
+
+    elif prefix == 'studentAbsents':
+        data_find_student = {
+            "code": code
+        }
+        response_find_student = requests.get(url=base_url + 'student', params=data_find_student)
+        student = response_find_student.json()
+
+        full_name = f"{student['surname']} {student['name']}"
+        show_student_absents(call=call, name=full_name)
 
 
 def auth_code(message: telebot.types.Message):

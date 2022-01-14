@@ -52,13 +52,13 @@ def main_admin_menu():
     return keyboard
 
 
-def choose_student(founded_students):
+def choose_student(founded_students, prefix):
     keyboard = InlineKeyboardMarkup()
     for student in founded_students:
         full_name = f"{student['surname']} {student['name']}"
         keyboard.add(
-            InlineKeyboardButton(text=full_name, callback_data=f"choose_student_{student['code']}"))
+            InlineKeyboardButton(text=full_name, callback_data=f"choose_student_{student['code']}_{prefix}"))
     keyboard.add(
-        InlineKeyboardButton(text='Другой', callback_data=f"choose_student_nobody"))
+        InlineKeyboardButton(text='Другой', callback_data=f"choose_student_nobody_{prefix}"))
 
     return keyboard
