@@ -7,7 +7,7 @@ import tools
 import menu
 
 bot = telebot.TeleBot(secret.API_TOKEN)
-base_url = 'http://localhost:5050/v1/'
+base_url = 'http://localhost:8000/v1/'
 
 
 class Absent:
@@ -89,7 +89,7 @@ def callback_inline(call: telebot.types.CallbackQuery):
         temp_absents[str(call.from_user.id)] = Absent(call.from_user.id)
         msg = bot.edit_message_text(f'Выберите ученика. Напишите имя или фамилию частично', call.from_user.id,
                                     call.message.id)
-        bot.register_next_step_handler(msg, choose_student, addAbsent)
+        bot.register_next_step_handler(msg, choose_student, 'addAbsent')
 
     elif call.data.startswith('choose_student_nobody'):
         prefix = call.data.split('choose_student_nobody_')[1]
@@ -146,9 +146,9 @@ def callback_inline(call: telebot.types.CallbackQuery):
                                     call.message.id, reply_markup=menu.choose_day('classAbsents'))
 
 
-def show_student_absents(name: str, call: telebot.types.CallbackQuery):
+def show_student_absents(code: str, name: str, call: telebot.types.CallbackQuery):
     request_query = {
-        "tg_user_id": call.from_user.id
+        "code": code
     }
     response = requests.get(f'{base_url}student/absents', params=request_query).json()
     if len(response['absents']) == 0:
@@ -305,7 +305,7 @@ def choose_student_call(call):
         student = response_find_student.json()
 
         full_name = f"{student['surname']} {student['name']}"
-        show_student_absents(call=call, name=full_name)
+        show_student_absents(call=call, name=full_name, code=data_find_student['code'])
 
 
 def auth_code(message: telebot.types.Message):
