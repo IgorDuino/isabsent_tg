@@ -78,6 +78,9 @@ def school_admin_menu(school_name):
         InlineKeyboardButton(text="Загрузить список учителей из таблицы ⬇️",
                              callback_data=f"load_teachers_from_google_{school_name}"))
     keyboard.add(
+        InlineKeyboardButton(text="Ученики",
+                             callback_data=f"get_students_{school_name}"))
+    keyboard.add(
         InlineKeyboardButton(text="Удалить школу 🗑️",
                              callback_data=f"delete_school_{school_name}"))
     keyboard.add(
@@ -121,4 +124,13 @@ def admin_school_list(school_names_list):
     keyboard.add(
         InlineKeyboardButton(text="Назад ◀️", callback_data=f"main_admin_menu"))
 
+    return keyboard
+
+
+def teacher_accept_request(by):
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(
+        InlineKeyboardButton(text="Одобрить ✅", callback_data=f"approve_request_{by}"))
+    keyboard.add(
+        InlineKeyboardButton(text="Отклонить ❌", callback_data=f"reject_request_{by}"))
     return keyboard

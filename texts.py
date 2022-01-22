@@ -7,8 +7,12 @@ first_text = 'Здравствуйте, я бот IsAbsent 👋\nЧтобы на
 
 main_admin_menu = 'Главное меню админа'
 
+choose_date_from_student = 'Выбери дату пропуска'
+
 all_schools_text = 'Всего {count} школ:'
 admin_school_menu = 'Меню школы {school_name}'
+
+new_request_from_student = 'Ваш ученик хочет добавить своё отсутствие на {date} по причине {reason}'
 
 
 def welcome_text(user: User):
